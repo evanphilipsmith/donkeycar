@@ -5,6 +5,8 @@ import numpy as np
 from PIL import Image
 import glob
 from donkeycar.utils import rgb2gray
+import depthai as dai
+import cv2
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -136,7 +138,7 @@ class Webcam(BaseCamera):
                 raise CameraError(f"The 'CAMERA_INDEX={camera_index}' configuration in myconfig.py is out of range.")
 
             self.cam = pygame.camera.Camera(l[camera_index], self.resolution, "RGB")
-            self.cam.start()
+#          self.cam.start()
 
             logger.info(f'Webcam opened at {l[camera_index]} ...')
             warming_time = time.time() + 5  # quick after 5 seconds
@@ -192,6 +194,102 @@ class Webcam(BaseCamera):
             self.cam.stop()
             self.cam = None
         time.sleep(.5)
+
+class OAKD(BaseCamera):
+    import cv2
+    import depthai as dai
+
+    def __init__(self, image_w=160, image_h=120, image_d=3, framerate = 20, camera_index=0):
+        
+        
+        super().__init__()
+
+        # initialize variable used to indicate
+        # if the thread should be stopped
+        self.frame = None
+        self.image_d = image_d
+        self.image_w = image_w
+        self.image_h = image_h
+        self.framerate = framerate
+
+        self.init_camera(image_w, image_h, image_d)
+        self.on = True
+
+    def init_camera(self, image_w, image_h, image_d, camera_index=0):
+
+        logger.info('Opening OAKD...')
+
+        self.resolution = (image_w, image_h)
+        self.pipeline = dai.Pipeline()
+
+        # Define a source - color camera
+        self.camRgb = self.pipeline.create(dai.node.ColorCamera)
+        self.camRgb.setPreviewSize(self.image_w, self.image_h)
+        self.camRgb.setInterleaved(False)
+
+        self.camControlIn = self.pipeline.create(dai.node.XLinkIn)
+        self.camControlIn.setStreamName('camControl')
+        self.camControlIn.out.link(self.camRgb.inputControl)
+
+
+        # # Create output
+        self.xoutRgb = self.pipeline.createXLinkOut()
+        self.xoutRgb.setStreamName("rgb")
+        self.camRgb.preview.link(self.xoutRgb.input)
+        self.start_time = time.time()
+        self.device = dai.Device(self.pipeline,usb2Mode=True)
+        self.start_time =time.time()
+        self.device.startPipeline()
+                 
+        start_time = time.time()
+        while True:
+            
+#             print('Connected cameras: ', self.device.getConnectedCameras())
+            # Print out usb speed
+#             print('Usb speed: ', self.device.getUsbSpeed().name)
+
+            controlQueue = self.device.getInputQueue('camControl')
+            ctrl = dai.CameraControl()
+#             ctrl.setAutoExposureEnable()
+            controlQueue.send(ctrl)
+            end_time = time.time()
+            print(end_time)
+            if(end_time-start_time)>6:
+                self.qRgb = self.device.getOutputQueue(name="rgb")
+                print("Exposure set for the current environment...OAKD STARTED........")
+                break
+
+
+    def run(self,qRgb):
+        
+        
+        inRgb = qRgb.get() 
+        
+        self.frame  = inRgb.getCvFrame()
+        self.frame   = cv2.cvtColor(self.frame,cv2.COLOR_BGR2RGB) 
+
+        return self.frame     
+
+    def update(self):	
+        from datetime import datetime, timedelta
+        while self.on:
+            start = datetime.now()
+            self.run(self.qRgb)
+            stop = datetime.now()
+            s = 1 / self.framerate - (stop - start).total_seconds()
+            if s > 0:
+                time.sleep(s)
+
+    def run_threaded(self):
+	    return self.frame
+#     def shutdown(self):
+# # indicate that the thread should be stopped
+# self.on = False
+# if self.cam:
+# logger.info('stopping Webcam')
+# self.cam.stop()
+# self.cam = None
+# time.sleep(.5)
 
 
 class CSICamera(BaseCamera):
