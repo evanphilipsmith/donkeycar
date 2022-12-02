@@ -235,7 +235,6 @@ class VESC:
         self.v.set_servo((angle * self.steering_scale) + self.steering_offset)
         self.v.set_duty_cycle(throttle*self.percent)
 
-
 @deprecated("Deprecated in favor or PulseController.  This will be removed in a future release")
 class PiGPIO_PWM():
     '''

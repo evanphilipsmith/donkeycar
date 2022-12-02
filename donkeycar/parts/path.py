@@ -435,6 +435,14 @@ class PID_Pilot(object):
         if self.use_constant_throttle or velocities is None or closest_pt_idx is None:
             throttle = self.throttle
         else:
-            throttle = velocities[closest_pt_idx] * self.variable_speed_multiplier
+            # if going straight accelerate
+            if (steer > 0.45 and steer < 0.55):      
+                self.variable_speed_multiplier = 2.0        
+                throttle = velocities[closest_pt_idx] * self.variable_speed_multiplier
+            # if turning decelerate
+            else:
+                self.variable_speed_multiplier = 0.5
+                throttle = velocities[closest_pt_idx] * self.variable_speed_multiplier
         logging.info("CTE: %f steer: %f throttle: %f" % (cte, steer, throttle))
         return steer, throttle
+
